@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+ <title>undernexus</title>
+ <link href="http://undernexus.com/atom.xml" rel="self"/>
+ <link href="http://undernexus.com/"/>
+ <updated>2014-07-10T16:54:06+02:00</updated>
+ <id>http://undernexus.com</id>
+ <author>
+   <name>undernexus</name>
+   <email></email>
+ </author>
+
+ 
+ <entry>
+   <title>An approach to analyze windows event logs</title>
+   <link href="http://undernexus.com/2014/07/10/windows-eventlogs/"/>
+   <updated>2014-07-10T00:00:00+02:00</updated>
+   <id>http://undernexus.com/2014/07/10/windows-eventlogs</id>
+   <content type="html">&lt;p&gt;A common task during incident response and computer forensics is to analyze logs in search of useful information. Logs come in a wide variety of formats, from well known and documented open standards to obscure and proprietary formats.&lt;/p&gt;
+
+&lt;p&gt;Each analyst makes use of multiple methods and tools to perform log analysis, depending on a lot of factors but often based on the format of the logs and the kind of information he/she has or is searching for.&lt;/p&gt;
+
+&lt;p&gt;We will try to illustrate one of the approaches we use, using one of our past projects. This project required us to investigate some alleged unauthorized access to some critical systems in a large network. &lt;/p&gt;
+
+&lt;p&gt;After the incident took place, the client contacted us and, after the briefing and following our protocols, we started collecting information and evidences. Most of the information came in the form of multiple log files ranging from firewalls to workstation logs. &lt;/p&gt;
+
+&lt;p&gt;Due to the raw amount of data, we wanted to aggregate all the information in the log files to seamlessly search through all the evidences. This way it will be easier to find suspicious activity correlating multiple sources.&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;http://www.splunk.com/&quot;&gt;Splunk Enterprise&lt;/a&gt; is our default tool for this kind of tasks considering its flexibility and our familiarity with it. We are also lately experimenting with &lt;a href=&quot;http://www.elasticsearch.org/overview/&quot;&gt;the Elasticsearch ELK stack&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;Near all the logs where in plain text, XML, csv or other well known or easily parseable formats. Microsoft Windows event logs being the most important exception.&lt;/p&gt;
+
+&lt;p&gt;For Windows event logs we routinely use excellent tools like the native Microsoft Windows Event Viewer or &lt;a href=&quot;http://www.microsoft.com/en-us/download/details.aspx?id=24659&quot;&gt;Log Parser&lt;/a&gt;. But this time we wanted to analyze large quantities of event log files and also easily correlate them with the other logs we got.&lt;/p&gt;
+
+&lt;p&gt;Since Microsoft Windows Vista / Server 2008, Windows event logs are stored in binary XML files, with the default &amp;quot;.evtx&amp;quot; extension (more info at &lt;a href=&quot;http://msdn.microsoft.com/en-us/library/windows/desktop/aa385785.aspx&quot;&gt;Microsoft MSDN&lt;/a&gt;).&lt;/p&gt;
+
+&lt;p&gt;After some search and different approaches, we decided to use the handy &lt;a href=&quot;http://www.williballenthin.com/evtx/index.html&quot;&gt;python-evtx&lt;/a&gt; parser developed by Willi Ballenthin (&lt;a href=&quot;https://twitter.com/williballenthin&quot;&gt;@williballenthin&lt;/a&gt;).&lt;/p&gt;
+
+&lt;p&gt;The &lt;a href=&quot;https://github.com/williballenthin/python-evtx/blob/master/scripts/evtxdump.py&quot;&gt;evtxdump.py&lt;/a&gt; tool parses the event log files and transforms the binary XML into something we thought Splunk will understand: human readable ASCII XML format.&lt;/p&gt;
+
+&lt;p&gt;To parse all the &amp;quot;evtx&amp;quot; files we got, we used a command like this:&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-text&quot; data-lang=&quot;text&quot;&gt;find /case000/logs/evtx -iname &amp;quot;*.evtx&amp;quot; | while read file; do filename=`basename &amp;quot;$file&amp;quot;`; \
+evtxdump.py &amp;quot;$file&amp;quot; &amp;gt; /case000/logs/parsed_evtx/&amp;quot;$filename&amp;quot;.xml; done
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Once we got the resulting ASCII XML files, we wanted to consolidate them with the rest of the information we gathered from our client&amp;#39;s infrastructure and systems and that we have already indexed in Splunk.&lt;/p&gt;
+
+&lt;p&gt;Even though Splunk could directly extract almost all the elements and attributes from our new ASCII XML files (when specifying the &lt;code&gt;KV_MODE = XML&lt;/code&gt; for field extraction), we detected a problem with &lt;a href=&quot;http://msdn.microsoft.com/en-us/library/windows/desktop/aa384375.aspx&quot;&gt;&amp;quot;EventData&amp;quot;&lt;/a&gt; and &lt;a href=&quot;http://msdn.microsoft.com/en-us/library/windows/desktop/aa384359.aspx&quot;&gt;&amp;quot;Data&amp;quot;&lt;/a&gt; elements:&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-text&quot; data-lang=&quot;text&quot;&gt;&amp;lt;EventData&amp;gt;&amp;lt;Data Name=&amp;quot;SubjectUserSid&amp;quot;&amp;gt;S-1-0-0&amp;lt;/Data&amp;gt;
+&amp;lt;Data Name=&amp;quot;SubjectUserName&amp;quot;&amp;gt;-&amp;lt;/Data&amp;gt;
+&amp;lt;Data Name=&amp;quot;SubjectDomainName&amp;quot;&amp;gt;-&amp;lt;/Data&amp;gt;
+&amp;lt;Data Name=&amp;quot;SubjectLogonId&amp;quot;&amp;gt;0x0000000000000000&amp;lt;/Data&amp;gt;
+&amp;lt;Data Name=&amp;quot;TargetUserSid&amp;quot;&amp;gt;S-1-5-18&amp;lt;/Data&amp;gt;
+&amp;lt;Data Name=&amp;quot;TargetUserName&amp;quot;&amp;gt;SYSTEM&amp;lt;/Data&amp;gt;
+&amp;lt;Data Name=&amp;quot;TargetDomainName&amp;quot;&amp;gt;NT AUTHORITY&amp;lt;/Data&amp;gt;
+&amp;lt;Data Name=&amp;quot;TargetLogonId&amp;quot;&amp;gt;0x00000000000003e7&amp;lt;/Data&amp;gt;
+&amp;lt;Data Name=&amp;quot;LogonType&amp;quot;&amp;gt;0&amp;lt;/Data&amp;gt;
+&amp;lt;Data Name=&amp;quot;LogonProcessName&amp;quot;&amp;gt;-&amp;lt;/Data&amp;gt;
+&amp;lt;Data Name=&amp;quot;AuthenticationPackageName&amp;quot;&amp;gt;-&amp;lt;/Data&amp;gt;
+&amp;lt;Data Name=&amp;quot;WorkstationName&amp;quot;&amp;gt;-&amp;lt;/Data&amp;gt;
+&amp;lt;Data Name=&amp;quot;LogonGuid&amp;quot;&amp;gt;00000000-0000-0000-0000-000000000000&amp;lt;/Data&amp;gt;
+&amp;lt;Data Name=&amp;quot;TransmittedServices&amp;quot;&amp;gt;-&amp;lt;/Data&amp;gt;
+&amp;lt;Data Name=&amp;quot;LmPackageName&amp;quot;&amp;gt;-&amp;lt;/Data&amp;gt;
+&amp;lt;Data Name=&amp;quot;KeyLength&amp;quot;&amp;gt;0&amp;lt;/Data&amp;gt;
+&amp;lt;Data Name=&amp;quot;ProcessId&amp;quot;&amp;gt;0x00000004&amp;lt;/Data&amp;gt;
+&amp;lt;Data Name=&amp;quot;ProcessName&amp;quot;&amp;gt;&amp;lt;/Data&amp;gt;
+&amp;lt;Data Name=&amp;quot;IpAddress&amp;quot;&amp;gt;-&amp;lt;/Data&amp;gt;
+&amp;lt;Data Name=&amp;quot;IpPort&amp;quot;&amp;gt;-&amp;lt;/Data&amp;gt;
+&amp;lt;/EventData&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;As you can see in the image below, Splunk groups all the &amp;quot;Data Names&amp;quot; in one field, for example &amp;quot;SubjectUserSid&amp;quot;, &amp;quot;SubjectUserName&amp;quot; and &amp;quot;SubjectLogonId&amp;quot;, and their values in another field:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/public/img/without_transform.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+
+&lt;p&gt;To solve this problem, and properly index our Windows event logs, we had to define a Splunk&amp;#39;s custom source type and a custom field transform.&lt;/p&gt;
+
+&lt;p&gt;First we defined a new source type, that we called &amp;quot;winevtx&amp;quot;, in Splunk&amp;#39;s &amp;quot;$SPLUNK_HOME/etc/system/local/props.conf&amp;quot; config file:&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-text&quot; data-lang=&quot;text&quot;&gt;[winevtx]
+SHOULD_LINEMERGE = true
+BREAK_ONLY_BEFORE = ^\&amp;lt;Event xmlns=
+TIME_PREFIX = SystemTime=
+KV_MODE = xml
+REPORT-winevtx-eventdata = winevtx_eventdata
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;We specified the new source type with the following options:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;em&gt;SHOULD_LINEMERGE = true&lt;/em&gt;: because XML files are multi-line logs.&lt;/li&gt;
+&lt;li&gt;&lt;em&gt;BREAK&lt;em&gt;ONLY&lt;/em&gt;BEFORE = ^&amp;lt;Event xmlns=&lt;/em&gt;: each event begins with the &amp;quot;Event&amp;quot; element.&lt;/li&gt;
+&lt;li&gt;&lt;em&gt;TIME_PREFIX = SystemTime=&lt;/em&gt;: for timestamp recognition.&lt;/li&gt;
+&lt;li&gt;&lt;em&gt;KV_MODE = xml&lt;/em&gt;: XML field extraction mode.&lt;/li&gt;
+&lt;li&gt;&lt;em&gt;REPORT-winevtx-eventdata = winevtx_eventdata&lt;/em&gt;: we will use a custom field transform, to solve the &amp;quot;EventData&amp;quot; and &amp;quot;Data&amp;quot; elements problem.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Then we had to define our custom field transform &amp;quot;winevtx&lt;em&gt;eventdata&amp;quot; in $SPLUNK&lt;/em&gt;HOME/etc/system/local/transforms.conf file:&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-text&quot; data-lang=&quot;text&quot;&gt;[winevtx_eventdata]
+REGEX = \&amp;lt;Data Name=&amp;quot;(?&amp;lt;_KEY_1&amp;gt;[^\&amp;gt;]*)&amp;quot;\&amp;gt;(?&amp;lt;_VAL_1&amp;gt;[^\&amp;lt;]+)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;At that point, it was possible for Splunk to index our XML event log files using our newly defined &amp;quot;winevtx&amp;quot; source type:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/public/img/sourcetype.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+
+&lt;p&gt;A quick test revealed that our custom transform works as expected, because Splunk correctly extracted the &amp;quot;EventData&amp;quot; and &amp;quot;Data&amp;quot; fields:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/public/img/with_extract_data_transform.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+
+&lt;p&gt;Then it was possible, for example, to search for successful logins (&amp;quot;System.EventID = 4624&amp;quot;) by logon type, process name, and user name. It was a matter of typing the following search in Splunk:&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-text&quot; data-lang=&quot;text&quot;&gt;&amp;quot;Event.System.Provider{@Name}&amp;quot;=&amp;quot;Microsoft-Windows-Security-Auditing&amp;quot; &amp;quot;Event.System.EventID&amp;quot;=4624 | stats count by LogonType,LogonProcessName,ProcessName,TargetUserName | sort -count
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;&lt;img src=&quot;/public/img/successful_logins.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+
+&lt;p&gt;Or to find how many successful logins had occurred over the time by user, with this one:&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-text&quot; data-lang=&quot;text&quot;&gt;&amp;quot;Event.System.Provider{@Name}&amp;quot;=&amp;quot;Microsoft-Windows-Security-Auditing&amp;quot; &amp;quot;Event.System.EventID&amp;quot;=4624 | timechart span=1d count by TargetUserName
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;&lt;img src=&quot;/public/img/successful_logins_by_username.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+
+&lt;blockquote&gt;
+&lt;p&gt;Those examples and results were made up during the writing of this post to illustrate the point. Due to the sensitivity of the past project and to not include any client&amp;#39;s data, we used old event logs from our own test machines.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;Once we finally had all the information properly indexed we analyzed it and confirmed our clients suspicions: we identified some unauthorized access to critical systems thanks to correlations from the Microsoft Event logs, the corporation firewalls, VPN concentrators and their IDS/IPS.&lt;/p&gt;
+
+&lt;p&gt;Furthermore we improved our log analysis capabilities for future projects.&lt;/p&gt;
+</content>
+ </entry>
+ 
+
+</feed>
